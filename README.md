@@ -32,7 +32,7 @@ O repositório fornece `api/auth.js`, `api/publish.js` e `api/_shared.js` para e
 
 ## Integridade e segurança
 
-- `biblioteca-tjes.json`: `version=1`, `records` com códigos `SATE0000` (quatro números), IDs únicos e campo `text` obrigatório.
+- `biblioteca-tjes.json`: `version=1`, `records` com códigos alfanuméricos, como `SATE0719`, `SPJE0001` e `3PRJD001` (preservar o identificador de origem), IDs únicos e campo `text` obrigatório.
 - `versao.json`: `schemaVersion=1`, `contentVersion` inteiro positivo, `recordCount` igual ao número de registros e `dataFile=biblioteca-tjes.json`.
 - Teste local: `node --test tests/validate.mjs`.
 - O painel não transmite os rascunhos à API até a ação explícita de publicação. Exportação gera backup JSON.
