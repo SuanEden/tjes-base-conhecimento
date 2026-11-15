@@ -3,7 +3,7 @@ const S=require('./_shared');
 module.exports=async function(req,res){
  if(req.method!=='POST'){S.respond(res,405,{error:'Use POST'});return}
  const user=S.session(req);if(!user){S.respond(res,401,{error:'Faça login no GitHub para publicar'});return}
- const ownOrigin='https://'+req.headers.host;
+ const ownOrigin=process.env.PUBLIC_BASE_URL||'';
  if(req.headers.origin!==ownOrigin||req.headers['x-tjes-csrf']!==S.csrf(req)){S.respond(res,403,{error:'Requisição não autorizada'});return}
  try{
   const payload=typeof req.body==='string'?JSON.parse(req.body):req.body;
