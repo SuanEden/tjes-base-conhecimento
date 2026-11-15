@@ -13,7 +13,7 @@ module.exports=async function(req,res){
   if(Buffer.byteLength(body,'utf8')>3.8*1024*1024)throw Error('Biblioteca excede limite de publicação');
   const branch=await S.github('/repos/'+S.OWNER+'/'+S.REPO+'/git/ref/heads/main',user.token);
   const current=await S.github('/repos/'+S.OWNER+'/'+S.REPO+'/contents/versao.json?ref=main',user.token);
-  const manifest=JSON.parse(Buffer.from(current.content.replace(/\\s/g,''),'base64').toString('utf8'));
+  const manifest=JSON.parse(Buffer.from(current.content.replace(/\s/g,''),'base64').toString('utf8'));
   if(manifest.contentVersion!==payload.expectedVersion){S.respond(res,409,{error:'A base foi atualizada por outra pessoa. Atualize a página e revise as alterações.',currentVersion:manifest.contentVersion});return}
   const next={...manifest,contentVersion:manifest.contentVersion+1,recordCount:library.records.length,publishedOn:new Date().toISOString().slice(0,10)};
   const orig=await S.github('/repos/'+S.OWNER+'/'+S.REPO+'/git/commits/'+branch.object.sha,user.token);
