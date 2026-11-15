@@ -9,7 +9,7 @@ module.exports=async function(req,res){
  if(action==='start'){
   if(!process.env.GITHUB_CLIENT_ID||!process.env.GITHUB_CLIENT_SECRET||!process.env.GITHUB_ALLOWED_USERS){S.respond(res,503,{error:'Autenticação não configurada'});return}
   const state=crypto.randomBytes(24).toString('hex'),exp=Date.now()+600000;
-  const origin='https://'+req.headers.host,callback=origin+'/api/auth?action=callback';
+  const origin=process.env.PUBLIC_BASE_URL;if(!origin||!/^https:\/\/[a-z0-9.-]+$/i.test(origin)){S.respond(res,503,{error:'PUBLIC_BASE_URL inválido'});return}const callback=origin+'/api/auth?action=callback';
   res.setHeader('Set-Cookie',S.cookie('tjes_login_state',S.encode({state,exp}),600));
   const q=new URLSearchParams({client_id:process.env.GITHUB_CLIENT_ID,redirect_uri:callback,scope:'public_repo read:user',state,allow_signup:'false'});
   res.writeHead(302,{Location:'https://github.com/login/oauth/authorize?'+q}).end();return;
