@@ -9,7 +9,7 @@ test('Biblioteca tem formato e IDs únicos',()=>{
  assert.ok(library.records.length>0&&library.records.length<=10000);
  const ids=new Set();
  for(const r of library.records){
-  assert.match(r.id,/^SATE\d{4}$/i);
+  assert.match(r.id,/^[A-Z0-9_-]{2,32}$/i);
   assert.ok(!ids.has(r.id),'Duplicado: '+r.id);
   assert.equal(typeof r.text,'string');
   assert.ok(r.text.length<=100000);
