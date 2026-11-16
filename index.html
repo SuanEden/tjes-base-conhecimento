@@ -57,7 +57,7 @@ function valid(rows){
 }
 async function gitBlobSha(text){
  if(!globalThis.crypto?.subtle)throw Error('Navegador sem suporte à verificação de integridade');
- const bytes=new TextEncoder().encode(text),header=new TextEncoder().encode('blob '+bytes.length+'\\0');
+ const bytes=new TextEncoder().encode(text),header=new TextEncoder().encode('blob '+bytes.length+'\0');
  const full=new Uint8Array(header.length+bytes.length);
  full.set(header);full.set(bytes,header.length);
  const digest=await crypto.subtle.digest('SHA-1',full);
@@ -66,7 +66,7 @@ async function gitBlobSha(text){
 function previewTitle(r){
  const title=String(r.title||r.id||'').trim(),id=String(r.id||'');
  if(!title.startsWith(id)||!/[·—-]/.test(title.slice(id.length)))return title;
- const lines=String(r.text||'').split('\\n').map(x=>x.trim()).filter(Boolean);
+ const lines=String(r.text||'').split('\n').map(x=>x.trim()).filter(Boolean);
  return lines.filter((line,i)=>i>0&&!/^(GSC|CRIADO EM|PUBLICADO|VISUALIZAÇÕES|USOS|ÚLTIMA|PROBLEMA|SOLUÇÃO)/i.test(line)).slice(0,2).join(' ').slice(0,160)||title;
 }
 function persist(){valid(records);localStorage.setItem(KEY,JSON.stringify({savedAt:new Date().toISOString(),records}));dirty=false}
