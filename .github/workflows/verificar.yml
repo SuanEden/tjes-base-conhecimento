@@ -1,0 +1,17 @@
+name: Verificar base de conhecimento
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Testar dados, integridade e API
+        run: node --test tests/*.mjs
