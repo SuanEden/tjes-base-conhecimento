@@ -61,3 +61,13 @@ test('Publicação exige integridade de origem e atualização atômica',()=>{
  assert.match(server,/force:false/);
  assert.match(client,/expectedDataSha:baseBlobSha/);
 });
+
+import { webcrypto } from 'node:crypto';
+test('SHA calculado pelo painel corresponde ao blob Git da biblioteca',async()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const begin=html.indexOf('async function gitBlobSha('),end=html.indexOf('function previewTitle(',begin);
+ assert.ok(begin>0&&end>begin,'função de integridade do painel encontrada');
+ const fn=new Script(html.slice(begin,end)+';gitBlobSha').runInNewContext({crypto:webcrypto,TextEncoder,Uint8Array});
+ const raw=readFileSync(new URL('../biblioteca-tjes.json',import.meta.url),'utf8');
+ assert.equal(await fn(raw),manifest.sourceBlobSha);
+});
