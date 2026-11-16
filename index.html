@@ -39,16 +39,41 @@ main{padding:25px;max-width:1350px}
 <section class="panel" id="publication" style="padding:19px;margin-top:20px"><h2 style="margin:0 0 8px">Publicação oficial</h2><p class="subtitle" id="pubStatus" role="status">Verificando se a publicação segura está disponível…</p><div class="buttons" style="margin-top:15px"><button class="btn" type="button" id="login" hidden>Entrar com GitHub</button><button class="btn primary" type="button" id="publish" hidden>Publicar alterações</button><button class="btn" type="button" id="logout" hidden>Sair da conta</button></div><p class="subtitle" style="margin-top:12px">Somente usuários autorizados podem publicar. O backup local não é enviado automaticamente.</p></section><section class="panel" id="backup" style="padding:19px;margin-top:20px"><h2 style="margin:0 0 8px">Importar e exportar</h2><p class="subtitle">Faça um backup antes de grandes alterações. A importação substitui apenas o rascunho deste navegador.</p><div class="buttons" style="margin-top:15px"><button class="btn" type="button" id="import">Importar backup JSON</button><button class="btn" type="button" id="reset">Restaurar base publicada</button><input type="file" id="file" accept=".json,application/json" hidden></div></section><div class="footnote" id="ajuda"><strong>Como usar:</strong> digite um termo, selecione o artigo e clique em <strong>Editar conhecimento</strong>. Após salvar, as alterações ficam somente neste navegador. Para revisão, utilize <strong>Exportar rascunho</strong>. Nenhuma alteração é enviada automaticamente ao GitHub.</div></main></div><div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
 <script>
 (()=>{'use strict';
-const $=id=>document.getElementById(id),KEY='tjes_admin_rascunho_v1';let original=null,records=[],selected=null,mode='view',query='',category='',dirty=false,auth=null,publishedVersion=null;
+const $=id=>document.getElementById(id),KEY='tjes_admin_rascunho_v1';let original=null,records=[],selected=null,mode='view',query='',category='',dirty=false,auth=null,publishedVersion=null,baseBlobSha=null;
 const norm=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 const clone=x=>JSON.parse(JSON.stringify(x));
 function toast(t){let e=$('toast');e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,3500)}
-function valid(rows){if(!Array.isArray(rows)||rows.length>10000)throw Error('Lista inválida');let ids=new Set;for(const r of rows){if(!r||typeof r.id!=='string'||!r.id.trim()||ids.has(r.id)||typeof r.text!=='string')throw Error('Código repetido ou artigo inválido');ids.add(r.id)}}
+function valid(rows){
+ if(!Array.isArray(rows)||rows.length<1||rows.length>10000)throw Error('Lista de artigos inválida');
+ const ids=new Set();
+ for(const r of rows){
+  if(!r||typeof r.id!=='string'||!/^[A-Z0-9_-]{2,32}$/i.test(r.id)||
+    typeof r.title!=='string'||!r.title.trim()||r.title.length>250||
+    typeof r.text!=='string'||!r.text.trim()||r.text.length>100000||
+    String(r.category||'').length>250||String(r.group||'').length>250||
+    String(r.path||'').length>500||ids.has(r.id.toUpperCase()))throw Error('Conhecimento inválido ou código duplicado: '+String(r?.id||''));
+  ids.add(r.id.toUpperCase());
+ }
+}
+async function gitBlobSha(text){
+ if(!globalThis.crypto?.subtle)throw Error('Navegador sem suporte à verificação de integridade');
+ const bytes=new TextEncoder().encode(text),header=new TextEncoder().encode('blob '+bytes.length+'\\0');
+ const full=new Uint8Array(header.length+bytes.length);
+ full.set(header);full.set(bytes,header.length);
+ const digest=await crypto.subtle.digest('SHA-1',full);
+ return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+function previewTitle(r){
+ const title=String(r.title||r.id||'').trim(),id=String(r.id||'');
+ if(!title.startsWith(id)||!/[·—-]/.test(title.slice(id.length)))return title;
+ const lines=String(r.text||'').split('\\n').map(x=>x.trim()).filter(Boolean);
+ return lines.filter((line,i)=>i>0&&!/^(GSC|CRIADO EM|PUBLICADO|VISUALIZAÇÕES|USOS|ÚLTIMA|PROBLEMA|SOLUÇÃO)/i.test(line)).slice(0,2).join(' ').slice(0,160)||title;
+}
 function persist(){valid(records);localStorage.setItem(KEY,JSON.stringify({savedAt:new Date().toISOString(),records}));dirty=false}
 function categories(){const select=$('category'),prior=select.value;select.replaceChildren();const all=document.createElement('option');all.value='';all.textContent='Todas as categorias';select.append(all);for(const cat of [...new Set(records.map(x=>x.category).filter(Boolean))].sort()){const opt=document.createElement('option');opt.value=cat;opt.textContent=cat;select.append(opt)}select.value=prior&&[...select.options].some(o=>o.value===prior)?prior:'';category=select.value}
-function ranked(){const words=norm(query).split(/[^a-z0-9]+/).filter(Boolean);return records.map(r=>{if(category&&r.category!==category)return null;const id=norm(r.id),title=norm(r.title),body=norm(r.text),cat=norm(r.category);if(words.some(w=>!id.includes(w)&&!title.includes(w)&&!cat.includes(w)&&!body.includes(w)))return null;let rank=words.reduce((n,w)=>n+(id.includes(w)?20:0)+(title.includes(w)?10:0)+(cat.includes(w)?3:0)+(body.includes(w)?1:0),0);return {r,rank}}).filter(Boolean).sort((a,b)=>b.rank-a.rank||a.r.id.localeCompare(b.r.id,'pt-BR'))}
+function ranked(){const words=norm(query).split(/[^a-z0-9]+/).filter(Boolean);return records.map(r=>{if(category&&r.category!==category)return null;const id=norm(r.id),title=norm(previewTitle(r)+' '+r.title),body=norm(r.text),cat=norm(r.category);if(words.some(w=>!id.includes(w)&&!title.includes(w)&&!cat.includes(w)&&!body.includes(w)))return null;let rank=words.reduce((n,w)=>n+(id.includes(w)?20:0)+(title.includes(w)?10:0)+(cat.includes(w)?3:0)+(body.includes(w)?1:0),0);return {r,rank}}).filter(Boolean).sort((a,b)=>b.rank-a.rank||a.r.id.localeCompare(b.r.id,'pt-BR'))}
 function renderList(){const items=$('results');items.replaceChildren();const hits=ranked();$('count').textContent=hits.length+' de '+records.length+' artigos';$('total').textContent=records.length+' conhecimentos';if(!hits.length){const e=document.createElement('div');e.className='empty';e.textContent='Nenhum conhecimento encontrado. Experimente outra palavra-chave.';items.append(e);return}
-const frag=document.createDocumentFragment();for(let i=0;i<Math.min(hits.length,1000);i++){const {r}=hits[i],button=document.createElement('button');button.type='button';button.className='result'+(r.id===selected?' active':'');const rank=document.createElement('span');rank.className='rank';rank.textContent=String(i+1);const info=document.createElement('span');info.className='result-body';const title=document.createElement('strong');title.textContent=r.title||r.id;const sm=document.createElement('small');sm.textContent=r.id+' · '+(r.category||'Sem categoria');info.append(title,sm);button.append(rank,info);button.onclick=()=>{if(dirty&&!confirm('Há alterações não salvas. Deseja descartá-las?'))return;dirty=false;selected=r.id;mode='view';renderList();renderArticle()};frag.append(button)}items.append(frag)}
+const frag=document.createDocumentFragment();for(let i=0;i<Math.min(hits.length,1000);i++){const {r}=hits[i],button=document.createElement('button');button.type='button';button.className='result'+(r.id===selected?' active':'');const rank=document.createElement('span');rank.className='rank';rank.textContent=String(i+1);const info=document.createElement('span');info.className='result-body';const title=document.createElement('strong');title.textContent=previewTitle(r);const sm=document.createElement('small');sm.textContent=r.id+' · '+(r.category||'Sem categoria');info.append(title,sm);button.append(rank,info);button.onclick=()=>{if(dirty&&!confirm('Há alterações não salvas. Deseja descartá-las?'))return;dirty=false;selected=r.id;mode='view';renderList();renderArticle()};frag.append(button)}items.append(frag)}
 function button(text,style,cb){const b=document.createElement('button');b.type='button';b.className='btn '+(style||'');b.textContent=text;b.onclick=cb;return b}
 function nextKnowledgeCode(){
  let counter=1;const taken=new Set(records.map(x=>String(x.id||'').toUpperCase()));
@@ -57,7 +82,7 @@ function nextKnowledgeCode(){
 }
 function renderArticle(){const el=$('article');el.replaceChildren();$('rightTitle').textContent=mode==='edit'?'Editar conhecimento':mode==='new'?'Novo conhecimento':'Visualização do conhecimento';$('rightHint').textContent=selected||'';
 if(mode==='view'){const r=records.find(x=>x.id===selected);if(!r){const h=document.createElement('h2');h.textContent='Escolha um artigo';const p=document.createElement('p');p.className='subtitle';p.textContent='Selecione um conhecimento na lista para visualizar seu conteúdo.';el.append(h,p);return}
-const id=document.createElement('div');id.className='article-meta';id.textContent=r.id;const h=document.createElement('h2');h.textContent=r.title||r.id;const chips=document.createElement('div');chips.className='chips';for(const t of [r.category||'Sem categoria',r.group].filter(Boolean)){const span=document.createElement('span');span.className='chip';span.textContent=t;chips.append(span)}const label=document.createElement('h3');label.textContent='Conteúdo do conhecimento';const pre=document.createElement('pre');pre.textContent=r.text||'Não há conteúdo cadastrado';const acts=document.createElement('div');acts.className='article-actions';acts.append(button('Editar conhecimento','primary',()=>{mode='edit';renderArticle()}));el.append(id,h,chips,label,pre,acts);return}
+const id=document.createElement('div');id.className='article-meta';id.textContent=r.id;const h=document.createElement('h2');h.textContent=previewTitle(r);const chips=document.createElement('div');chips.className='chips';for(const t of [r.category||'Sem categoria',r.group].filter(Boolean)){const span=document.createElement('span');span.className='chip';span.textContent=t;chips.append(span)}const label=document.createElement('h3');label.textContent='Conteúdo do conhecimento';const pre=document.createElement('pre');pre.textContent=r.text||'Não há conteúdo cadastrado';const acts=document.createElement('div');acts.className='article-actions';acts.append(button('Editar conhecimento','primary',()=>{mode='edit';renderArticle()}));el.append(id,h,chips,label,pre,acts);return}
 const r=mode==='new'?{id:nextKnowledgeCode(),title:'',category:'',group:'',text:'',path:'',pages:0}:records.find(x=>x.id===selected);if(!r){mode='view';renderArticle();return}const h=document.createElement('h2');h.textContent=mode==='new'?'Cadastrar conhecimento':'Modificar conhecimento';const intro=document.createElement('p');intro.className='subtitle';intro.textContent='Preencha os campos. As alterações serão salvas como rascunho local.';el.append(h,intro);
 const form=document.createElement('form');form.style.marginTop='20px';function field(name,label,value,isLong=false){const wrapper=document.createElement('div');wrapper.className='field';const lab=document.createElement('label');lab.htmlFor=name;lab.textContent=label;const input=document.createElement(isLong?'textarea':'input');input.id=name;input.value=String(value??'');input.addEventListener('input',()=>{dirty=true});input.maxLength=isLong?100000:250;input.required=['id','title','text'].includes(name);wrapper.append(lab,input);form.append(wrapper);return input}
 const codeField=field('id','Código *',r.id);codeField.readOnly=true;codeField.title=mode==='new'?'Código gerado automaticamente para o novo conhecimento.':'O código é permanente. Crie outro artigo para usar outro código.';field('title','Título *',r.title);field('categoryField','Categoria',r.category);field('group','Grupo',r.group);field('text','Conteúdo do conhecimento *',r.text,true);
@@ -92,17 +117,17 @@ $('login').onclick=()=>{location.href='/api/auth?action=start'};
 $('logout').onclick=()=>{location.href='/api/auth?action=logout'};
 $('publish').onclick=async()=>{
  if(!auth?.authenticated||!auth.csrf){toast('Faça login para publicar');return}
- if(!Number.isSafeInteger(publishedVersion)){toast('Versão oficial indisponível. Não é seguro publicar.');return}
+ if(!Number.isSafeInteger(publishedVersion)||!/^[a-f0-9]{40}$/i.test(String(baseBlobSha||''))){toast('Versão ou integridade da base indisponível. Não é seguro publicar.');return}
  if(dirty){toast('Salve o formulário como rascunho antes de publicar');return}
  try{valid(records)}catch(e){toast('Biblioteca inválida: '+e.message);return}
  if(JSON.stringify(records)===JSON.stringify(original?.records)){toast('Não há alterações para publicar');return}
  if(!confirm('Publicar oficialmente '+records.length+' conhecimentos na base central? A extensão e o offline poderão baixar a nova versão.'))return;
  $('publish').disabled=true;$('pubStatus').textContent='Publicando e verificando versão…';
  try{
-  const response=await fetch('/api/publish',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-TJES-CSRF':auth.csrf},body:JSON.stringify({expectedVersion:publishedVersion,library:{...original,records}})});
+  const response=await fetch('/api/publish',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-TJES-CSRF':auth.csrf},body:JSON.stringify({expectedVersion:publishedVersion,expectedDataSha:baseBlobSha,library:{...original,records}})});
   const data=await response.json();
   if(!response.ok)throw Error(data.error||'Falha HTTP '+response.status);
-  publishedVersion=data.version;original={...original,records:clone(records)};
+  publishedVersion=data.version;baseBlobSha=data.dataBlobSha;original={...original,records:clone(records)};
   localStorage.removeItem(KEY);
   $('pubStatus').textContent='Versão '+data.version+' publicada com sucesso por '+auth.login+'.';
   toast('Publicação oficial concluída · v'+data.version);
@@ -130,6 +155,6 @@ $('reset').onclick=()=>{
  try{localStorage.removeItem(KEY);records=clone(original.records);dirty=false;selected=null;mode='view';categories();renderList();renderArticle();toast('Base publicada restaurada neste navegador')}catch(error){toast('Falha ao restaurar: '+error.message)}
 };
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue=''}});
-(async()=>{try{const res=await fetch('./biblioteca-tjes.json',{cache:'no-cache'});if(!res.ok)throw Error('Biblioteca indisponível');original=await res.json();valid(original.records);let saved;try{saved=JSON.parse(localStorage.getItem(KEY)||'null');if(saved?.records)valid(saved.records)}catch{saved=null}records=saved?.records||clone(original.records);categories();renderList();renderArticle();void refreshPublication()}catch(err){$('total').textContent='Indisponível';$('results').textContent='Não foi possível carregar os artigos: '+err.message}})();
+(async()=>{try{const res=await fetch('./biblioteca-tjes.json',{cache:'no-cache'});if(!res.ok)throw Error('Biblioteca indisponível');const raw=await res.text();original=JSON.parse(raw);valid(original.records);baseBlobSha=await gitBlobSha(raw);let saved;try{saved=JSON.parse(localStorage.getItem(KEY)||'null');if(saved?.records)valid(saved.records)}catch{saved=null}records=saved?.records||clone(original.records);categories();renderList();renderArticle();void refreshPublication()}catch(err){$('total').textContent='Indisponível';$('results').textContent='Não foi possível carregar os artigos: '+err.message}})();
 })();
 </script></body></html>
