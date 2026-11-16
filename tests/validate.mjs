@@ -40,12 +40,12 @@ test('Backend aceita biblioteca válida e rejeita dados incompatíveis',()=>{
 });
 test('Conteúdo e manifesto identificam o mesmo blob Git',()=>{
  const bytes=readFileSync(new URL('../biblioteca-tjes.json',import.meta.url));
- const digest=createHash('sha1').update('blob '+bytes.length+'\\0').update(bytes).digest('hex');
+ const digest=createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
  assert.equal(digest,manifest.sourceBlobSha);
 });
 test('Interface do painel e serviços de API têm sintaxe válida',()=>{
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
- const script=html.match(/<script>([\\s\\S]*?)<\\/script>/)?.[1];
+ const script=html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
  assert.ok(script,'script principal encontrado');
  assert.doesNotThrow(()=>new Script(script));
  for(const path of ['../api/_shared.js','../api/auth.js','../api/publish.js']){
@@ -57,7 +57,7 @@ test('Publicação exige integridade de origem e atualização atômica',()=>{
  const server=readFileSync(new URL('../api/publish.js',import.meta.url),'utf8');
  const client=readFileSync(new URL('../index.html',import.meta.url),'utf8');
  assert.match(server,/expectedDataSha/);
- assert.match(server,/currentData\\.sha!==payload\\.expectedDataSha/);
+ assert.match(server,/currentData\.sha!==payload\.expectedDataSha/);
  assert.match(server,/force:false/);
  assert.match(client,/expectedDataSha:baseBlobSha/);
 });
